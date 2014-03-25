@@ -6,37 +6,39 @@ var request = require("supertest")
 /**
 * Instantiate the middelware
 */
+var app = express();
 var fileName = "./api_response_test.txt";
 var urlStr = "/api/"
 var responseTimes = require("../index.js")(fileName, urlStr);
 
-var app = express();
+before(function(){
+	/**
+	* plug the middleware in
+	*/
+	app.use(responseTimes);
 
-/**
-* plug the middleware in
-*/
-app.use(responseTimes);
+	/**
+	* Some mock routes with set timeouts to simulate a large async function
+	*/
+	app.get('/api/user', function(req, res){
+		setTimeout(function(){
+			res.send(201, { name: 'tobi' });
+		}, 1400);
+	  	
+	});
 
-/**
-* Some mock routes with set timeouts to simulate a large async function
-*/
-app.get('/api/user', function(req, res){
-	setTimeout(function(){
-		res.send(201, { name: 'tobi' });
-	}, 1400);
-  	
-});
+	app.get('/api/user2', function(req, res){
+	  	setTimeout(function(){
+			res.send(201, { name: 'tobi2' });
+		}, 1500);
+	});
 
-app.get('/api/user2', function(req, res){
-  	setTimeout(function(){
-		res.send(201, { name: 'tobi2' });
-	}, 1500);
-});
+	app.get('/user', function(req, res){
+		setTimeout(function(){
+			res.send(201, { name: 'tobi3' });
+		}, 1000);
+	});
 
-app.get('/user', function(req, res){
-	setTimeout(function(){
-		res.send(201, { name: 'tobi3' });
-	}, 1000);
 });
 
 /**
@@ -133,5 +135,74 @@ describe("failures", function(){
 	});
 
 
+});
+
+describe("GET /api/user different regex", function(){
+	/**
+	* Overwrite the previous express
+	*/
+	var app = express();
+	var file;
+	var urlStr2 = ""; //matches all
+	var responseTimes2 = require("../index.js")(fileName, urlStr2);
+
+
+	before(function(){
+		app.use(responseTimes2);
+
+		/**
+		* Some mock routes with set timeouts to simulate a large async function
+		*/
+		app.get('/api/user', function(req, res){
+			setTimeout(function(){
+				res.send(201, { name: 'tobi4' });
+			}, 1400);
+		  	
+		});
+
+		app.get('/user', function(req, res){
+			setTimeout(function(){
+				res.send(201, { name: 'tobi5' });
+			}, 1000);
+		});
+	});
+
+
+	it("should write to the file", function(done){
+		//get some info about the file
+		file = fs.readFileSync(fileName, {encoding: "utf8"});
+		//do the request
+		request(app)
+		  .get('/api/user')
+		  .end(function(err, res){
+		    if (err) throw err;
+		    expect(res.statusCode).to.equal(201);
+		    expect(res.body.name).to.equal("tobi4");
+		    done();
+		  });
+	});
+	it("should have appended to the file", function(done){
+		var file2 = fs.readFileSync(fileName, {encoding: "utf8"});
+		expect(file.length).to.be.lessThan(file2.length);
+		done();
+	});
+	it("should write to the file", function(done){
+		//get some info about the file
+		file = fs.readFileSync(fileName, {encoding: "utf8"});
+		//do the request
+		request(app)
+		  .get('/user')
+		  .end(function(err, res){
+		    if (err) throw err;
+		    expect(res.statusCode).to.equal(201);
+		    expect(res.body.name).to.equal("tobi5");
+		    done();
+		  });
+	});
+	it("should have appended to the file", function(done){
+		var file2 = fs.readFileSync(fileName, {encoding: "utf8"});
+		expect(file.length).to.be.lessThan(file2.length);
+		done();
+	});
 });
 
